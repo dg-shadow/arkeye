@@ -152,7 +152,7 @@ ros::Publisher ros_publisher("adc", &adc_msg);
 void setup()
 {
   ros_node_handle.initNode();
-  ros_node_handle.advertise(p);
+  ros_node_handle.advertise(ros_publisher);
 
 
   pitch = new ArkEyeServo(PITCH_FWD_PWM_PIN, PITCH_REV_PWM_PIN, PITCH_HBRIDGE_PIN, PITCH_INPUT_PIN, PITCH_SENSOR_MIN, PITCH_SENSOR_MAX, PITCH_P, PITCH_I, PITCH_D);
