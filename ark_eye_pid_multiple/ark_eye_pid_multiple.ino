@@ -13,66 +13,60 @@
 class ArkEyeServo
 {
   private:
-    PID *pid_fwd_, *pid_rev_;
-    double setpoint_, input_, output_fwd_, output_rev_;
+    PID *pid_;
+    double setpoint_, input_, output_;
     double p_, i_, d_;
     double sensor_max_, sensor_min_;
-    const int fwd_pwm_pin_, rev_pwm_pin_, hbridge_enable_pin_, input_pin_;
+    const int pwm_pin_, direction_pin_, input_pin_;
     boolean going;
     void read_average_input();
+    int direction_;
   public:
-    ArkEyeServo(int fwd_pwm_pin, int rev_pwm_pin, int h_bridge_enable_pin, int input_pin_, double sensor_min, double sensor_max, double p, double i, double d);
+    ArkEyeServo(int pwm_pin, int direction_pin, int input_pin, double sensor_min, double sensor_max, double p, double i, double d);
     void set_setpoint(double setpoint);
     void compute();
     void read_input();
    ~ArkEyeServo();
-   double get_output_fwd();
+   double get_output();
    double get_input();
-   double get_output_rev();
+   double get_setpoint();
    void do_output();
    void start();
    void stop();
+   int get_direction();
 };
 
-ArkEyeServo::ArkEyeServo(int fwd_pwm_pin, int rev_pwm_pin, int hbridge_enable_pin, int input_pin, double sensor_min, double sensor_max, double p, double i, double d) : 
-  sensor_max_(sensor_max), sensor_min_(sensor_min), p_(p), i_(i), d_(d), going(false), setpoint_(512), input_(512),
-  fwd_pwm_pin_(fwd_pwm_pin), rev_pwm_pin_(rev_pwm_pin), hbridge_enable_pin_(hbridge_enable_pin), input_pin_(input_pin)
+int ArkEyeServo::get_direction(void)
 {
-  digitalWrite(hbridge_enable_pin_, 0);
-  pinMode( hbridge_enable_pin_, OUTPUT);
-  digitalWrite(hbridge_enable_pin_, 0);
-
-  pinMode(fwd_pwm_pin_, OUTPUT);
-  analogWrite(fwd_pwm_pin_, 0);
-
-  pinMode(rev_pwm_pin_, OUTPUT);
-  analogWrite(rev_pwm_pin_, 0);
+  return direction_;
+}
+ArkEyeServo::ArkEyeServo(int pwm_pin, int direction_pin, int input_pin, double sensor_min, double sensor_max, double p, double i, double d) : 
+  sensor_max_(sensor_max), sensor_min_(sensor_min), p_(p), i_(i), d_(d), going(false), setpoint_(512), input_(512),
+  pwm_pin_(pwm_pin), direction_pin_(direction_pin), input_pin_(input_pin), direction_(0), output_(0)
+{
+  pinMode(pwm_pin_, OUTPUT);
+  pinMode(direction_pin_, OUTPUT);
   
   pinMode(input_pin_, INPUT);
 
   read_input();
 
-  pid_fwd_ = new PID(&input_, &output_fwd_, &setpoint_, p_, i_, d_, DIRECT);
-  pid_rev_ = new PID(&setpoint_, &output_rev_, &input_, p_, i_, d_, DIRECT);
-  
+  pid_ = new PID(&input_, &output_, &setpoint_, p_, i_, d_, DIRECT);  
 }
 
 void ArkEyeServo::start()
 {
-  pid_fwd_->SetMode(AUTOMATIC);
-  pid_rev_->SetMode(AUTOMATIC);
-  
-  digitalWrite(hbridge_enable_pin_, 1);
+  pid_->SetMode(AUTOMATIC);
+  pid_->SetOutputLimits(-254.0,254.0);
   
   going = true;
 }
 
 ArkEyeServo::~ArkEyeServo()
 {
-  delete pid_fwd_;
-  delete pid_rev_;
+  delete pid_;
 }
-
+ 
 void ArkEyeServo::set_setpoint(double setpoint)
 {
   setpoint_ = setpoint;
@@ -81,35 +75,44 @@ void ArkEyeServo::compute()
 {
   if (!going) return;
   
-  pid_fwd_->Compute();
-  pid_rev_->Compute();
+  pid_->Compute();
 }
 
 void ArkEyeServo::do_output()
-{// might need to switch precedence of output depending on direction of movement.
-  
+{ 
   if (!going) return;
+  double error = (setpoint_ - input_);
+  if (error < 0) error *= -1;
+  if (error < 10) output_ = 0;
+
   
-  if (output_fwd_)
+  if (output_ > 0) 
   {
-    analogWrite(rev_pwm_pin_, 0);
-    analogWrite(fwd_pwm_pin_, output_fwd_);
-  }
-  else if (output_rev_)
-  {
-    analogWrite(fwd_pwm_pin_, 0);
-    analogWrite(rev_pwm_pin_, output_rev_);
+    direction_  = 1;
+    digitalWrite(direction_pin_, 0);
+    analogWrite(pwm_pin_, output_);
   }
   else
   {
-    analogWrite(fwd_pwm_pin_, 0);
-    analogWrite(rev_pwm_pin_, 0);
+    direction_  = 0;
+    digitalWrite(direction_pin_, 1);
+    analogWrite(pwm_pin_, (-1*output_) );
   }
 }
 
 void ArkEyeServo::read_input()
 {
-  input_ = map(analogRead(input_pin_), sensor_min_, sensor_max_, 0, 1024);
+  double  old_input = input_;
+ 
+  input_ = 0.0;
+  for (int x = 0; x < 8; x++) input_ += analogRead(input_pin_);
+  input_ = input_/8.0;
+ 
+ double  difference = input_ - old_input;
+// if (difference > 50 || difference < -50) going = 0;
+
+//  input_ = map(input_/4,sensor_min_, sensor_max_, 0, 1024);
+  if (input_ < 0.0) input_ = 0.0;
 }
 
 double ArkEyeServo::get_input()
@@ -117,17 +120,15 @@ double ArkEyeServo::get_input()
   return input_;
 }
 
-double ArkEyeServo::get_output_fwd()
+double ArkEyeServo::get_output()
 {
-  return output_fwd_;
+  return output_;
 }
 
-double ArkEyeServo::get_output_rev()
+double ArkEyeServo::get_setpoint()
 {
-  return output_rev_;
+  return setpoint_;
 }
-
-
 
 
 ArkEyeServo * pitch;
@@ -137,17 +138,16 @@ ros::NodeHandle ros_node_handle;
 rosserial_arduino::Adc adc_msg;
 ros::Publisher ros_publisher("adc", &adc_msg);
 
-#define PITCH_FWD_PWM_PIN 3
-#define PITCH_REV_PWM_PIN 5
-#define PITCH_HBRIDGE_PIN 4
+#define PITCH_PWM_PIN 5
+#define PITCH_DIRECTION_PIN 4
 #define PITCH_INPUT_PIN 0
 
-#define PITCH_SENSOR_MIN 10
-#define PITCH_SENSOR_MAX 1000
+#define PITCH_SENSOR_MIN 50
+#define PITCH_SENSOR_MAX 950
 
-#define PITCH_P 0.4
-#define PITCH_I 0.2
-#define PITCH_D 0.1
+#define PITCH_P 5
+#define PITCH_I 0
+#define PITCH_D 1
 
 void setup()
 {
@@ -155,7 +155,7 @@ void setup()
   ros_node_handle.advertise(ros_publisher);
 
 
-  pitch = new ArkEyeServo(PITCH_FWD_PWM_PIN, PITCH_REV_PWM_PIN, PITCH_HBRIDGE_PIN, PITCH_INPUT_PIN, PITCH_SENSOR_MIN, PITCH_SENSOR_MAX, PITCH_P, PITCH_I, PITCH_D);
+  pitch = new ArkEyeServo(PITCH_PWM_PIN, PITCH_DIRECTION_PIN, PITCH_INPUT_PIN, PITCH_SENSOR_MIN, PITCH_SENSOR_MAX, PITCH_P, PITCH_I, PITCH_D);
   pitch->start();
 
 }
@@ -163,15 +163,38 @@ void setup()
 
 void loop()
 {
-
+  static int time = millis(), dirn = 1;
+  static double setpoint = 512;
+  int now = millis();
+ 
+  if (now - time > 10)
+ {
+    if (dirn)
+    {
+      if (setpoint < 750)
+        setpoint += 1;
+      else
+        dirn = 0;
+    }
+    else
+    {
+      if (setpoint > 250)
+        setpoint -= 1;
+      else
+        dirn = 1;
+    }
+    pitch->set_setpoint(setpoint);
+    time = millis();
+    
+ } 
+  
   pitch->read_input();
   pitch->compute();
   pitch->do_output();
   
-  adc_msg.adc1 = pitch->get_input();
-  adc_msg.adc2 = pitch->get_output_fwd();
-  adc_msg.adc3 = pitch->get_output_rev();
-  
+  adc_msg.adc0 = pitch->get_input();
+  adc_msg.adc1 = pitch->get_output() + 256;
+  adc_msg.adc2 = pitch->get_setpoint();
   ros_publisher.publish(&adc_msg);
   ros_node_handle.spinOnce();
 }
