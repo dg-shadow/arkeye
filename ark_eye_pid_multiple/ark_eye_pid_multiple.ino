@@ -150,9 +150,9 @@ ros::Publisher ros_publisher("adc", &adc_msg);
 #define PITCH_SENSOR_MAX 950
 
 //working for steps
-#define PITCH_P .400  
-#define PITCH_I .1
-#define PITCH_D .11
+#define PITCH_P .42  
+#define PITCH_I .12
+#define PITCH_D .01
 
 
 #define YAW_P .400  
@@ -187,12 +187,12 @@ if (0) {
    {
       if (dirn)
       {
-        setpoint = 850;
+        setpoint = 750;
         dirn = 0;
       }
       else
       {
-        setpoint = 100;
+        setpoint = 200;
         dirn = 1;
       }
       
@@ -204,12 +204,12 @@ if (0) {
    {
       if (dirn)
       {
-        if (setpoint < 950) setpoint = setpoint + 40;
+        if (setpoint < 850) setpoint = setpoint + 30;
         else dirn = 0;
       }
       else
       {
-        if (setpoint > 150) setpoint = setpoint - 40;
+        if (setpoint > 210) setpoint = setpoint - 30;
         else dirn = 1;
       }
       time = millis();
