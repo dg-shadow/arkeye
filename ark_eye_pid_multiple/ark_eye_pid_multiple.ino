@@ -131,8 +131,6 @@ double ArkEyeServo::get_setpoint()
 }
 
 
-ArkEyeServo * pitch;
-
 ros::NodeHandle ros_node_handle;
 
 rosserial_arduino::Adc adc_msg;
@@ -143,9 +141,9 @@ ros::Publisher ros_publisher("adc", &adc_msg);
 #define PITCH_INPUT_PIN 0
 
 
-#define YAW_PWM_PIN 5
-#define YWA_DIRECTION_PIN 4
-#define PITCH_INPUT_PIN 0
+#define YAW_PWM_PIN 3
+#define YAW_DIRECTION_PIN 2
+#define YAW_INPUT_PIN 1
 
 
 #define PITCH_SENSOR_MIN 50
@@ -155,19 +153,26 @@ ros::Publisher ros_publisher("adc", &adc_msg);
 #define PITCH_P .400  
 #define PITCH_I .1
 #define PITCH_D .11
-/*
-#define PITCH_P 0.2
-#define PITCH_I 1
-#define PITCH_D .05*/
+
+
+#define YAW_P .400  
+#define YAW_I .1
+#define YAW_D .11
+
+
+
+ArkEyeServo  pitch(PITCH_PWM_PIN, PITCH_DIRECTION_PIN, PITCH_INPUT_PIN, PITCH_SENSOR_MIN, PITCH_SENSOR_MAX, PITCH_P, PITCH_I, PITCH_D);;
+ArkEyeServo  yaw(YAW_PWM_PIN, YAW_DIRECTION_PIN, YAW_INPUT_PIN, PITCH_SENSOR_MIN, PITCH_SENSOR_MAX, PITCH_P, PITCH_I, PITCH_D);
+
 void setup()
 {
   ros_node_handle.initNode();
   ros_node_handle.advertise(ros_publisher);
 
 
-  pitch = new ArkEyeServo(PITCH_PWM_PIN, PITCH_DIRECTION_PIN, PITCH_INPUT_PIN, PITCH_SENSOR_MIN, PITCH_SENSOR_MAX, PITCH_P, PITCH_I, PITCH_D);
-  pitch->start();
-
+  pitch.start();
+  yaw.start();
+  delay(5000);
 }
 
 
@@ -177,7 +182,7 @@ void loop()
   static double setpoint = 512;
   int now = millis();
 
-if (1) {
+if (0) {
     if (now - time > 5000)
    {
       if (dirn)
@@ -190,36 +195,45 @@ if (1) {
         setpoint = 100;
         dirn = 1;
       }
-      pitch->set_setpoint(setpoint);
+      
       time = millis();
    }
  }
-  else {
+  else if (1) {
     if (now - time > 100)
    {
       if (dirn)
       {
-        if (setpoint < 880) setpoint = setpoint + 10;
+        if (setpoint < 950) setpoint = setpoint + 40;
         else dirn = 0;
       }
       else
       {
-        if (setpoint > 150) setpoint = setpoint - 10;
+        if (setpoint > 150) setpoint = setpoint - 40;
         else dirn = 1;
       }
-      pitch->set_setpoint(setpoint);
       time = millis();
    }
     
   }
   
-  pitch->read_input();
-  pitch->compute();
-  pitch->do_output();
+  yaw.set_setpoint(setpoint);
+  pitch.set_setpoint(setpoint);
   
-  adc_msg.adc0 = pitch->get_input();
-  adc_msg.adc1 = pitch->get_output() + 256;
-  adc_msg.adc2 = pitch->get_setpoint();
+  
+  yaw.read_input();
+  yaw.compute();
+  
+  pitch.read_input();
+  pitch.compute();
+
+  yaw.do_output();
+  pitch.do_output();
+
+  
+  adc_msg.adc0 = pitch.get_input();
+  adc_msg.adc1 = pitch.get_output() + 256;
+  adc_msg.adc2 = pitch.get_setpoint();
   ros_publisher.publish(&adc_msg);
   ros_node_handle.spinOnce();
 }
