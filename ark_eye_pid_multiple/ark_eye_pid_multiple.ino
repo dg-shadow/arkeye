@@ -89,13 +89,13 @@ void ArkEyeServo::do_output()
   if (output_ > 0) 
   {
     direction_  = 1;
-    digitalWrite(direction_pin_, 0);
+    digitalWrite(direction_pin_, 1);
     analogWrite(pwm_pin_, output_);
   }
   else
   {
     direction_  = 0;
-    digitalWrite(direction_pin_, 1);
+    digitalWrite(direction_pin_, 0);
     analogWrite(pwm_pin_, (-1*output_) );
   }
 }
@@ -105,8 +105,8 @@ void ArkEyeServo::read_input()
   double  old_input = input_;
  
   input_ = 0.0;
-  for (int x = 0; x < 8; x++) input_ += analogRead(input_pin_);
-  input_ = input_/8.0;
+  for (int x = 0; x < 4; x++) input_ += analogRead(input_pin_);
+  input_ = input_/4.0;
  
  double  difference = input_ - old_input;
 // if (difference > 50 || difference < -50) going = 0;
@@ -142,13 +142,23 @@ ros::Publisher ros_publisher("adc", &adc_msg);
 #define PITCH_DIRECTION_PIN 4
 #define PITCH_INPUT_PIN 0
 
+
+#define YAW_PWM_PIN 5
+#define YWA_DIRECTION_PIN 4
+#define PITCH_INPUT_PIN 0
+
+
 #define PITCH_SENSOR_MIN 50
 #define PITCH_SENSOR_MAX 950
 
-#define PITCH_P 5
-#define PITCH_I 0
-#define PITCH_D 1
-
+//working for steps
+#define PITCH_P .400  
+#define PITCH_I .1
+#define PITCH_D .11
+/*
+#define PITCH_P 0.2
+#define PITCH_I 1
+#define PITCH_D .05*/
 void setup()
 {
   ros_node_handle.initNode();
@@ -166,27 +176,42 @@ void loop()
   static int time = millis(), dirn = 1;
   static double setpoint = 512;
   int now = millis();
- 
-  if (now - time > 10)
- {
-    if (dirn)
-    {
-      if (setpoint < 750)
-        setpoint += 1;
-      else
+
+if (1) {
+    if (now - time > 5000)
+   {
+      if (dirn)
+      {
+        setpoint = 850;
         dirn = 0;
-    }
-    else
-    {
-      if (setpoint > 250)
-        setpoint -= 1;
+      }
       else
+      {
+        setpoint = 100;
         dirn = 1;
-    }
-    pitch->set_setpoint(setpoint);
-    time = millis();
+      }
+      pitch->set_setpoint(setpoint);
+      time = millis();
+   }
+ }
+  else {
+    if (now - time > 100)
+   {
+      if (dirn)
+      {
+        if (setpoint < 880) setpoint = setpoint + 10;
+        else dirn = 0;
+      }
+      else
+      {
+        if (setpoint > 150) setpoint = setpoint - 10;
+        else dirn = 1;
+      }
+      pitch->set_setpoint(setpoint);
+      time = millis();
+   }
     
- } 
+  }
   
   pitch->read_input();
   pitch->compute();
